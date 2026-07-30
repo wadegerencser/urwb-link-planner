@@ -1,30 +1,22 @@
 # URWB Backhaul Link Planner
 
+## Get it running (pick one)
+
+| | Method | Command / Link |
+|---|--------|----------------|
+| 1 | **Browser — nothing to install** | **https://wadegerencser.github.io/urwb-link-planner/** |
+| 2 | One-shot download (macOS/Linux) | `curl -LO https://raw.githubusercontent.com/wadegerencser/urwb-link-planner/main/index.html && open index.html` |
+| 3 | One-shot download (Windows) | `curl -LO https://raw.githubusercontent.com/wadegerencser/urwb-link-planner/main/index.html && start index.html` |
+| 4 | Clone (to modify it) | `git clone https://github.com/wadegerencser/urwb-link-planner` then open `index.html` |
+
+No pip, no npm, no server, no build step — the browser is the runtime.
+It is one self-contained HTML file; p5.js loads from a CDN, so the first
+load needs internet access. (On Linux, replace `open` with `xdg-open`.)
+
+---
+
 Interactive 3D point-to-point wireless backhaul simulator for Cisco industrial
 access points (IW9165D / IW9165E / IW9167E, URWB-style deployments).
-
-## How to run
-
-No install, no server, no build step — the browser is the runtime.
-
-**1. Zero-install (recommended):** open the live version:
-https://wadegerencser.github.io/urwb-link-planner/
-
-**2. One-shot download:**
-
-```bash
-curl -LO https://raw.githubusercontent.com/wadegerencser/urwb-link-planner/main/index.html
-open index.html        # macOS (Windows: start index.html, Linux: xdg-open index.html)
-```
-
-**3. Clone (for hacking on it):**
-
-```bash
-git clone https://github.com/wadegerencser/urwb-link-planner
-```
-
-Then open `index.html`. Note: p5.js loads from a CDN, so the first load
-needs internet access.
 
 ## What it does
 
