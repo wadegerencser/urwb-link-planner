@@ -11,7 +11,7 @@
     --txt:#cfd8e3; --dim:#7d8ca0; --acc:#7ecbff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
   }
   html,body { margin:0; padding:0; overflow:hidden;
-    background:linear-gradient(180deg,#1b2438 0%,#2a3550 45%,#3d4257 68%,#2e3040 100%);
+    background:linear-gradient(180deg,#8fc1e8 0%,#b8d9f0 40%,#dceaf5 62%,#e8eef2 100%);
     font-family:'Helvetica Neue',Arial,sans-serif; color:var(--txt); }
   canvas.p5Canvas { display:block; }
   #panel {
@@ -254,9 +254,9 @@ function draw(){
   const cz=camDist*Math.cos(camPitch)*Math.sin(camAngle);
   const cy=camDist*Math.sin(camPitch)-80;
   camera(cx,cy,cz, 0,-110,0, 0,1,0);
-  ambientLight(88,84,80);
-  directionalLight(255,225,185,-0.45,0.75,-0.25);   // low warm sun
-  directionalLight(70,90,130,0.4,0.3,0.5);          // cool sky fill
+  ambientLight(150,152,155);
+  directionalLight(255,250,235,-0.35,0.85,-0.3);    // high daylight sun
+  directionalLight(120,140,165,0.4,0.3,0.5);        // sky bounce
 
   result=computeLink();
   buildLobeCache();
@@ -299,7 +299,7 @@ function drawCity(gy, half){
       if (Math.abs(bz)<400) continue;
       push(); translate(bx, gy-bh/2, bz);
       const warm=r2>0.5;
-      fill(warm?74:60, warm?70:66, warm?80:84);
+      fill(warm?214:188, warm?210:194, warm?202:198);
       box(bw, bh, bd);
       pop();
       // lit windows (sparse, emissive)
@@ -310,7 +310,7 @@ function drawCity(gy, half){
           translate(bx-bw/2+8+wC*(bw-16)/Math.max(cols-1,1),
                     gy-16-wR*26,
                     bz-zSide*(bd/2+1));
-          emissiveMaterial(255, 205+prand(wR+wC)*40, 120);
+          fill(96, 138+prand(wR+wC)*30, 178); noStroke();
           box(6,9,1.5);
           pop();
         }
@@ -319,32 +319,46 @@ function drawCity(gy, half){
   }
   // asphalt corridor under the link
   push(); translate(0, gy-0.5, 120); rotateX(HALF_PI); noStroke();
-  fill(52,54,60); plane(ext*2, 150); pop();
+  fill(148,150,154); plane(ext*2, 150); pop();
   // lane dashes
-  stroke(215,190,120,150); strokeWeight(2);
+  stroke(255,255,255,190); strokeWeight(2);
   for(let x=-ext;x<ext;x+=90){ line(x,gy-1,120, x+38,gy-1,120); }
   // street lights along corridor
   for(let x=-ext+120;x<ext;x+=340){
     push(); translate(x, gy-40, 190); noStroke();
     fill(60,66,74); cylinder(2, 80);
     translate(0,-42,-14); fill(60,66,74); box(30,3,3);
-    translate(-14,3,0); emissiveMaterial(255,230,170); sphere(3.5);
+    translate(-14,3,0); fill(210,215,222); sphere(3.5);
     pop();
   }
 }
 
 function drawGround(gy, half){
   push(); translate(0,gy+1,0); rotateX(HALF_PI); noStroke();
-  fill(47,50,46); plane(Math.max(half*2.6,1800), 1400); pop();
-  stroke(70,80,62,70); strokeWeight(1);
+  fill(118,152,96); plane(Math.max(half*2.6,1800), 1400); pop();
+  stroke(98,128,80,90); strokeWeight(1);
   const ext=Math.max(half*1.3,900);
   for(let g=-ext; g<=ext; g+=200){ line(g,gy,-700,g,gy,700); }
   for(let g=-700; g<=700; g+=200){ line(-ext,gy,g,ext,gy,g); }
 }
 
 function drawPole(x, gy, hpx, tag){
-  push(); translate(x, gy-hpx/2, 0); noStroke();
-  fill(78,88,100); cylinder(5, hpx); pop();
+  // rooftop building under the mast (~55% of mast height)
+  const bh=hpx*0.55, bw=110, bd=130;
+  push(); translate(x, gy-bh/2, 0); noStroke();
+  fill(206,204,198); box(bw, bh, bd); pop();
+  push(); translate(x, gy-bh-2, 0); noStroke();
+  fill(168,168,164); box(bw+10, 5, bd+10); pop();       // parapet slab
+  // glass window bands
+  fill(96,140,180); noStroke();
+  const bands=Math.max(1,Math.floor(bh/34));
+  for(let b=0;b<bands;b++){
+    push(); translate(x, gy-18-b*34, bd/2+1); box(bw*0.82, 12, 2); pop();
+    push(); translate(x, gy-18-b*34, -bd/2-1); box(bw*0.82, 12, 2); pop();
+  }
+  // mast from roof to AP
+  push(); translate(x, gy-bh-(hpx-bh)/2, 0); noStroke();
+  fill(120,126,134); cylinder(5, hpx-bh); pop();
   // AP box at top
   push(); translate(x, gy-hpx, 0); noStroke();
   fill(235,238,242); box(16,26,26);
@@ -401,9 +415,13 @@ function drawObstacle(gy, half, s){
 }
 
 function drawLOS(x1,y1,x2,y2){
-  stroke(255,255,255,140); strokeWeight(1.5);
+  stroke(255,255,255,220); strokeWeight(2);
   drawingContext.disable(drawingContext.DEPTH_TEST);
-  line(x1,y1,0,x2,y2,0);
+  const n=30;
+  for(let i=0;i<n;i+=2){
+    line(lerp(x1,x2,i/n), lerp(y1,y2,i/n), 0,
+         lerp(x1,x2,(i+1)/n), lerp(y1,y2,(i+1)/n), 0);
+  }
   drawingContext.enable(drawingContext.DEPTH_TEST);
 }
 
@@ -419,7 +437,10 @@ function drawFresnel(x1,y1,x2,y2,s){
     const p1={x:lerp(x1,x2,f1), y:lerp(y1,y2,f1)};
     const p2={x:lerp(x1,x2,f2), y:lerp(y1,y2,f2)};
     const nearWorst = Math.abs((f1+f2)/2 - result.worstX)<0.06 && blocked;
-    fill(nearWorst?248:80, nearWorst?113:180, nearWorst?113:255, nearWorst?60:26);
+    // infographic palette: green at both ends -> cyan-blue mid
+    const mid=1-Math.abs((f1+f2)/2-0.5)*2;   // 0 at ends, 1 at center
+    if (nearWorst) fill(248,113,113,70);
+    else fill(lerp(110,60,mid), lerp(215,175,mid), lerp(130,235,mid), 62);
     beginShape(TRIANGLE_STRIP);
     for(let k=0;k<=SEG;k++){
       const a=k/SEG*TWO_PI;
@@ -427,10 +448,14 @@ function drawFresnel(x1,y1,x2,y2,s){
       vertex(p2.x, p2.y+Math.cos(a)*r2, Math.sin(a)*r2);
     }
     endShape();
+    // segment ring like the sliced-lens look
+    stroke(255,255,255,48); strokeWeight(1); noFill();
+    push(); translate(p1.x,p1.y,0); rotateY(HALF_PI); circle(0,0,r1*2); pop();
+    noStroke();
   }
   // 60% core rings
   if (S.show60){
-    stroke(140,220,255,110); strokeWeight(1); noFill();
+    stroke(30,120,200,120); strokeWeight(1); noFill();
     for(let i=1;i<N;i+=4){
       const f=i/N, r=fresR(f,dKm)*0.6*s*VEX;
       const px=lerp(x1,x2,f), py=lerp(y1,y2,f);
@@ -489,7 +514,7 @@ function drawPulses(x1,y1,x2,y2){
 let markerG=null, markerKey='';
 function drawScaleBar(gy, half, s){
   // baseline along the link on the floor
-  stroke(230,215,180,150); strokeWeight(2);
+  stroke(60,80,105,170); strokeWeight(2);
   const y=gy+2;
   line(-half,y,120, half,y,120);
   // pick a tick step: ~6-12 ticks
@@ -500,7 +525,7 @@ function drawScaleBar(gy, half, s){
   if(key!==markerKey){ markerKey=key; markerG=buildMarkerStrip(step); }
   for(let m=0;m<=S.dist;m+=step){
     const x=-half+m*s;
-    stroke(230,215,180,170); strokeWeight(m%(step*2)===0?2.5:1.2);
+    stroke(60,80,105,190); strokeWeight(m%(step*2)===0?2.5:1.2);
     line(x,y,108, x,y,132);
   }
   // billboard labels every other tick
@@ -518,8 +543,8 @@ const labelCache={};
 function labelFor(txt){
   if(labelCache[txt]) return labelCache[txt];
   const g=createGraphics(96,34); g.pixelDensity(1); g.clear();
-  g.noStroke(); g.fill(15,20,30,190); g.rect(0,0,96,34,8);
-  g.fill(235,220,185); g.textAlign(g.CENTER,g.CENTER); g.textSize(17); g.textStyle(g.BOLD);
+  g.noStroke(); g.fill(255,255,255,215); g.rect(0,0,96,34,8);
+  g.fill(30,60,95); g.textAlign(g.CENTER,g.CENTER); g.textSize(17); g.textStyle(g.BOLD);
   g.text(txt,48,17);
   labelCache[txt]=g; return g;
 }
