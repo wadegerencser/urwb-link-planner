@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URWB Backhaul Link Planner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  :root {
+    --bg:#0b0e14; --panel:#11161f; --panel2:#161d29; --line:#26303f;
+    --txt:#cfd8e3; --dim:#7d8ca0; --acc:#7ecbff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
+  }
+  html,body { margin:0; padding:0; overflow:hidden; background:var(--bg);
+    font-family:'Helvetica Neue',Arial,sans-serif; color:var(--txt); }
+  canvas.p5Canvas { display:block; }
+  #panel {
+    position:fixed; top:0; right:0; width:300px; height:100vh; overflow-y:auto;
+    background:var(--panel); border-left:1px solid var(--line); z-index:20;
+    padding:14px 16px 30px 16px; box-sizing:border-box;
+  }
+  #panel h1 { font-size:15px; color:var(--acc); margin:0 0 2px 0; letter-spacing:.4px; }
+  #panel .sub { font-size:10.5px; color:var(--dim); margin-bottom:12px; }
+  .grp { background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; margin-bottom:10px; }
+  .grp h2 { font-size:11px; text-transform:uppercase; letter-spacing:1px;
+    color:var(--acc); margin:0 0 8px 0; }
+  label { display:block; font-size:11px; color:var(--dim); margin:7px 0 2px 0; }
+  label b { color:var(--txt); float:right; font-weight:600; }
+  input[type=range] { width:100%; accent-color:#4ea3e0; height:18px; }
+  select { width:100%; background:#0d1320; color:var(--txt); border:1px solid var(--line);
+    border-radius:5px; padding:5px 6px; font-size:12px; }
+  #budget table { width:100%; border-collapse:collapse; font-size:11.5px; }
+  #budget td { padding:2.5px 0; color:var(--dim); }
+  #budget td:last-child { text-align:right; color:var(--txt); font-weight:600;
+    font-variant-numeric:tabular-nums; }
+  #status { border-radius:6px; padding:8px 10px; font-size:12.5px; font-weight:700;
+    text-align:center; margin-top:8px; letter-spacing:.4px; }
+  .s-ok   { background:rgba(74,222,128,.12); color:var(--ok);   border:1px solid rgba(74,222,128,.4); }
+  .s-warn { background:rgba(251,191,36,.12); color:var(--warn); border:1px solid rgba(251,191,36,.4); }
+  .s-bad  { background:rgba(248,113,113,.12); color:var(--bad); border:1px solid rgba(248,113,113,.4); }
+  #keys { position:fixed; bottom:10px; left:14px; color:#5b6a7f; font-size:11px; z-index:10; }
+  #keys b { color:#9fb0c4; }
+  .note { font-size:10px; color:#5b6a7f; line-height:1.45; margin-top:4px; }
+  input[type=checkbox] { accent-color:#4ea3e0; vertical-align:-2px; }
+  .chk { font-size:11.5px; color:var(--txt); margin-top:6px; display:block; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>URWB Backhaul Link Planner</h1>
+  <div class="sub">Cisco industrial wireless point-to-point simulator &middot; drag poles in the scene or use sliders</div>
+
+  <div class="grp">
+    <h2>Access Point</h2>
+    <select id="apSel"></select>
+    <div id="antRow">
+      <label>External antenna</label>
+      <select id="antSel"></select>
+    </div>
+    <label>Radio band <b id="bandV"></b></label>
+    <select id="bandSel">
+      <option value="5.5">5 GHz (5500 MHz)</option>
+      <option value="6.1">6 GHz (6100 MHz)</option>
+    </select>
+    <label>Conducted Tx power <b id="txV"></b></label>
+    <input type="range" id="tx" min="1" max="30" step="1" value="20">
+    <div class="note" id="eirpNote"></div>
+  </div>
+
+  <div class="grp">
+    <h2>Geometry</h2>
+    <label>Link distance <b id="distV"></b></label>
+    <input type="range" id="dist" min="50" max="3000" step="10" value="600">
+    <label>Pole A height <b id="hAV"></b></label>
+    <input type="range" id="hA" min="2" max="40" step="0.5" value="10">
+    <label>Pole B height <b id="hBV"></b></label>
+    <input type="range" id="hB" min="2" max="40" step="0.5" value="10">
+  </div>
+
+  <div class="grp">
+    <h2>Obstacle</h2>
+    <label class="chk"><input type="checkbox" id="obsOn" checked> Enable obstacle</label>
+    <label>Position along path <b id="obsPV"></b></label>
+    <input type="range" id="obsP" min="5" max="95" step="1" value="50">
+    <label>Obstacle height <b id="obsHV"></b></label>
+    <input type="range" id="obsH" min="0" max="35" step="0.5" value="6">
+  </div>
+
+  <div class="grp">
+    <h2>Display</h2>
+    <label class="chk"><input type="checkbox" id="showLobes" checked> 3D radiation lobes</label>
+    <label class="chk"><input type="checkbox" id="showFres" checked> Fresnel zone (F1)</label>
+    <label class="chk"><input type="checkbox" id="show60" checked> 60% clearance core</label>
+    <label class="chk"><input type="checkbox" id="showPulse" checked> Signal pulses</label>
+  </div>
+
+  <div class="grp" id="budget">
+    <h2>Link Budget</h2>
+    <table>
+      <tr><td>EIRP per end</td><td id="bEirp"></td></tr>
+      <tr><td>Free-space path loss</td><td id="bFspl"></td></tr>
+      <tr><td>Received signal (RSSI)</td><td id="bRssi"></td></tr>
+      <tr><td>Rx sensitivity (MCS0-ish)</td><td id="bSens"></td></tr>
+      <tr><td>Fade margin</td><td id="bMargin"></td></tr>
+      <tr><td>F1 radius @ midpoint</td><td id="bF1"></td></tr>
+      <tr><td>Worst Fresnel clearance</td><td id="bClear"></td></tr>
+    </table>
+    <div id="status" class="s-ok">LINK OK</div>
+    <div class="note">Vertical scale exaggerated 4x for visibility; all computed values are true. FSPL model only (no rain/multipath). URWB best practice: keep 100% of F1 clear; 60% minimum. Fade margin target 10+ dB for reliable backhaul, 20 dB for critical.</div>
+  </div>
+</div>
+<div id="keys"><b>drag scene</b> orbit &nbsp; <b>scroll</b> zoom &nbsp; <b>drag pole tops</b> raise/lower &nbsp; <b>drag pole bases</b> move apart &nbsp; <b>S</b> save PNG</div>
+
+<script>
+p5.disableFriendlyErrors = true;
+
+// ================= AP / antenna catalog (URWB-capable) =================
+const APS = [
+  { id:'IW9165D', name:'IW9165D Heavy Duty (internal 15 dBi)', internal:true,
+    gain:15, bwAz:30, bwEl:30, maxTx:24,
+    note:'Built-in directional patch, 30\u00B0x30\u00B0. Purpose-built P2P/P2MP backhaul.' },
+  { id:'IW9165E', name:'IW9165E Rugged (external, N-type)', internal:false, maxTx:24,
+    note:'2x N-type. Pick an antenna below.' },
+  { id:'IW9167E', name:'IW9167E Heavy Duty (external, N-type)', internal:false, maxTx:27,
+    note:'Tri-band capable, URWB mode. Pick an antenna below.' },
+];
+const ANTS = [
+  { id:'omni8',  name:'8 dBi omni (360\u00B0)',           gain:8,  bwAz:360, bwEl:16 },
+  { id:'patch13',name:'13 dBi patch (35\u00B0x35\u00B0)', gain:13, bwAz:35,  bwEl:35 },
+  { id:'sector17',name:'17 dBi sector (90\u00B0x8\u00B0)',gain:17, bwAz:90,  bwEl:8  },
+  { id:'dish19', name:'19 dBi dish (18\u00B0x18\u00B0)',  gain:19, bwAz:18,  bwEl:18 },
+];
+
+// ================= state =================
+const S = {
+  ap:0, ant:3, fGHz:5.5, tx:20,
+  dist:600, hA:10, hB:10,
+  obsOn:true, obsP:50, obsH:6,
+  showLobes:true, showFres:true, show60:true, showPulse:true,
+};
+let camAngle=1.25, camPitch=-0.14, camDist=1250, t=0;
+const VEX=4;   // vertical display exaggeration (math uses true values)
+let dragTarget=null; // 'topA','topB','baseA','baseB', or null->orbit
+let result={};       // computed link results each frame
+
+// scene scale: world meters -> px
+function pxPerM(){ return 950 / Math.max(S.dist,60); }
+
+// ================= antenna math =================
+function cutDB(ang, bw){
+  if (bw >= 300) return 0; // omni in that plane
+  const a=Math.abs(ang);
+  const main = -12*Math.pow(a/bw,2);
+  const sll  = -14 - 8*Math.pow((a-bw*1.8)/(bw*1.5),2);
+  const back = -22;
+  return Math.max(main, sll, back, -28);
+}
+function gainDB(az, el, ap){ return Math.max(cutDB(az,ap.bwAz)+cutDB(el,ap.bwEl), -28); }
+function dbToR(db){ return Math.max(0,(db+28)/28); }
+function activeAnt(){
+  const ap = APS[S.ap];
+  if (ap.internal) return { gain:ap.gain, bwAz:ap.bwAz, bwEl:ap.bwEl };
+  return ANTS[S.ant];
+}
+
+// ================= RF math =================
+function computeLink(){
+  const ant = activeAnt();
+  const dKm = S.dist/1000, fMHz = S.fGHz*1000;
+  const eirp = S.tx + ant.gain;
+  const fspl = 32.44 + 20*Math.log10(dKm) + 20*Math.log10(fMHz);
+  const rssi = eirp + ant.gain - fspl; // symmetric link, same antenna both ends
+  const sens = -92;
+  const margin = rssi - sens;
+  // Fresnel & clearance sweep
+  const f1mid = 17.32*Math.sqrt((dKm/2*dKm/2)/(S.fGHz*dKm));
+  let worst = Infinity, worstX = 0;
+  const N=120;
+  for (let i=1;i<N;i++){
+    const frac=i/N, d1=dKm*frac, d2=dKm*(1-frac);
+    const r1 = 17.32*Math.sqrt((d1*d2)/(S.fGHz*dKm));
+    const losH = S.hA + (S.hB - S.hA)*frac;
+    let ground = 0;
+    if (S.obsOn){
+      const op=S.obsP/100, ow=0.02; // obstacle spans +/-2% of path
+      if (Math.abs(frac-op) < ow) ground = S.obsH;
+    }
+    const clear = (losH - ground) / r1; // clearance as fraction of F1
+    if (clear < worst){ worst = clear; worstX = frac; }
+  }
+  let stat, cls;
+  if (margin < 6)            { stat='LINK DOWN \u2014 INSUFFICIENT MARGIN'; cls='s-bad'; }
+  else if (worst < 0)        { stat='BLOCKED \u2014 OBSTACLE IN LOS';        cls='s-bad'; }
+  else if (worst < 0.6)      { stat='DEGRADED \u2014 <60% FRESNEL CLEAR';    cls='s-warn'; }
+  else if (margin < 10)      { stat='MARGINAL \u2014 LOW FADE MARGIN';       cls='s-warn'; }
+  else if (worst < 1.0)      { stat='USABLE \u2014 F1 PARTIALLY OBSTRUCTED'; cls='s-warn'; }
+  else                       { stat='LINK OK'; cls='s-ok'; }
+  return { eirp,fspl,rssi,sens,margin,f1mid,worst,worstX,stat,cls,ant };
+}
+
+// ================= p5 =================
+let lobeCacheKey='', lobeVerts=[];
+const PHI=48, TH=24;
+
+function setup(){
+  createCanvas(windowWidth, windowHeight, WEBGL);
+  pixelDensity(1);
+  buildUI();
+}
+
+function buildLobeCache(){
+  const ant=activeAnt();
+  const key=ant.gain+'/'+ant.bwAz+'/'+ant.bwEl;
+  if (key===lobeCacheKey) return;
+  lobeCacheKey=key; lobeVerts=[];
+  for(let i=0;i<=PHI;i++){
+    const row=[]; const az=(i/PHI)*360-180;
+    for(let j=0;j<=TH;j++){
+      const el=(j/TH)*180-90;
+      const db=gainDB(az,el,ant);
+      const r=dbToR(db);
+      const ca=Math.cos(az*Math.PI/180), sa=Math.sin(az*Math.PI/180);
+      const ce=Math.cos(el*Math.PI/180), se=Math.sin(el*Math.PI/180);
+      row.push({x:r*ce*ca, y:-r*se, z:r*ce*sa, db});
+    }
+    lobeVerts.push(row);
+  }
+}
+
+function draw(){
+  t+=deltaTime/1000;
+  background(11,14,20);
+  const view=(width-300);
+  // camera orbit around scene center
+  const cx=camDist*Math.cos(camPitch)*Math.cos(camAngle);
+  const cz=camDist*Math.cos(camPitch)*Math.sin(camAngle);
+  const cy=camDist*Math.sin(camPitch)-80;
+  camera(cx,cy,cz, 0,-110,0, 0,1,0);
+  ambientLight(75,80,90);
+  directionalLight(190,195,205,-0.4,0.8,-0.3);
+
+  result=computeLink();
+  buildLobeCache();
+  updateReadout();
+
+  const s=pxPerM();
+  const half=S.dist*s/2;
+  const groundY=140;
+  const yA=groundY - S.hA*s*VEX, yB=groundY - S.hB*s*VEX;
+
+  drawGround(groundY, half);
+  drawPole(-half, groundY, S.hA*s*VEX, 'A');
+  drawPole( half, groundY, S.hB*s*VEX, 'B');
+  if (S.obsOn) drawObstacle(groundY, half, s);
+  if (S.showFres) drawFresnel(-half,yA, half,yB, s);
+  drawLOS(-half,yA, half,yB);
+  if (S.showLobes){
+    drawLobe(-half,yA, 0);        // A aims +X
+    drawLobe( half,yB, Math.PI);  // B aims -X
+  }
+  if (S.showPulse) drawPulses(-half,yA,half,yB);
+  drawScaleBar(groundY, half, s);
+}
+
+function drawGround(gy, half){
+  push(); translate(0,gy+1,0); rotateX(HALF_PI); noStroke();
+  fill(20,27,38); plane(Math.max(half*2.6,1800), 1400); pop();
+  stroke(38,52,70,120); strokeWeight(1);
+  const ext=Math.max(half*1.3,900);
+  for(let g=-ext; g<=ext; g+=100){ line(g,gy,-700,g,gy,700); }
+  for(let g=-700; g<=700; g+=100){ line(-ext,gy,g,ext,gy,g); }
+}
+
+function drawPole(x, gy, hpx, tag){
+  push(); translate(x, gy-hpx/2, 0); noStroke();
+  fill(78,88,100); cylinder(5, hpx); pop();
+  // AP box at top
+  push(); translate(x, gy-hpx, 0); noStroke();
+  fill(235,238,242); box(16,26,26);
+  // faceplate toward the other pole
+  const dir = x<0 ? 1 : -1;
+  translate(dir*9,0,0); fill(220,224,230); box(4,22,22);
+  pop();
+  // drag handles
+  push(); translate(x, gy-hpx, 0); noStroke();
+  fill(126,203,255, 200); sphere(6); pop();      // top handle
+  push(); translate(x, gy, 0); noStroke();
+  fill(255,190,80, 190); sphere(6); pop();       // base handle
+}
+
+function drawObstacle(gy, half, s){
+  const x=-half + (S.obsP/100)*half*2;
+  const hpx=S.obsH*s*VEX, wpx=S.dist*0.04*s;
+  push(); translate(x, gy-hpx/2, 0); noStroke();
+  fill(90,80,70,230); box(Math.max(wpx,14), hpx, 90); 
+  pop();
+}
+
+function drawLOS(x1,y1,x2,y2){
+  stroke(255,255,255,140); strokeWeight(1.5);
+  drawingContext.disable(drawingContext.DEPTH_TEST);
+  line(x1,y1,0,x2,y2,0);
+  drawingContext.enable(drawingContext.DEPTH_TEST);
+}
+
+function drawFresnel(x1,y1,x2,y2,s){
+  const dKm=S.dist/1000;
+  const N=40, SEG=18;
+  const blocked = result.worst<0.6;
+  // F1 surface
+  noStroke();
+  for(let i=0;i<N;i++){
+    const f1=i/N, f2=(i+1)/N;
+    const r1=fresR(f1,dKm)*s*VEX, r2=fresR(f2,dKm)*s*VEX;
+    const p1={x:lerp(x1,x2,f1), y:lerp(y1,y2,f1)};
+    const p2={x:lerp(x1,x2,f2), y:lerp(y1,y2,f2)};
+    const nearWorst = Math.abs((f1+f2)/2 - result.worstX)<0.06 && blocked;
+    fill(nearWorst?248:80, nearWorst?113:180, nearWorst?113:255, nearWorst?60:26);
+    beginShape(TRIANGLE_STRIP);
+    for(let k=0;k<=SEG;k++){
+      const a=k/SEG*TWO_PI;
+      vertex(p1.x, p1.y+Math.cos(a)*r1, Math.sin(a)*r1);
+      vertex(p2.x, p2.y+Math.cos(a)*r2, Math.sin(a)*r2);
+    }
+    endShape();
+  }
+  // 60% core rings
+  if (S.show60){
+    stroke(140,220,255,110); strokeWeight(1); noFill();
+    for(let i=1;i<N;i+=4){
+      const f=i/N, r=fresR(f,dKm)*0.6*s*VEX;
+      const px=lerp(x1,x2,f), py=lerp(y1,y2,f);
+      push(); translate(px,py,0); rotateY(HALF_PI);
+      circle(0,0,r*2); pop();
+    }
+  }
+}
+function fresR(frac,dKm){
+  const d1=dKm*frac, d2=dKm*(1-frac);
+  return 17.32*Math.sqrt(Math.max(d1*d2,1e-9)/(S.fGHz*dKm));
+}
+
+function drawLobe(x,y,rotY){
+  const ant=activeAnt();
+  // lobe display size: scale with gain but clamp to scene
+  const R=constrain(80+ant.gain*6, 110, 230);
+  push(); translate(x,y,0); rotateY(rotY); noStroke();
+  for(let i=0;i<PHI;i++){
+    beginShape(TRIANGLE_STRIP);
+    for(let j=0;j<=TH;j++){
+      const a=lobeVerts[i][j], b=lobeVerts[i+1][j];
+      const u=dbToR(a.db);
+      if (u>0.8) fill(255, 150-((u-0.8)*420), 60, 95);
+      else if (u>0.5) fill(90+u*120, 195, 255, 70);
+      else fill(60, 105, 220, 48);
+      vertex(a.x*R,a.y*R,a.z*R); vertex(b.x*R,b.y*R,b.z*R);
+    }
+    endShape();
+  }
+  // azimuth rim
+  stroke(255,205,120,190); strokeWeight(1.6); noFill();
+  beginShape();
+  for(let az=-180;az<=180;az+=4){
+    const r=dbToR(gainDB(az,0,ant))*R;
+    vertex(r*Math.cos(az*Math.PI/180),0,r*Math.sin(az*Math.PI/180));
+  }
+  endShape(CLOSE);
+  pop();
+}
+
+function drawPulses(x1,y1,x2,y2){
+  const dKm=S.dist/1000, s=pxPerM();
+  noFill();
+  for(let k=0;k<2;k++){
+    const ph=((t*0.3+k/2)%1);
+    const f=ph;
+    const r=fresR(f,dKm)*s*VEX*0.45+4;
+    const px=lerp(x1,x2,f), py=lerp(y1,y2,f);
+    stroke(120,220,170, 200*(1-Math.abs(f-0.5)*1.2));
+    strokeWeight(2);
+    push(); translate(px,py,0); rotateY(HALF_PI); circle(0,0,r*2); pop();
+  }
+}
+
+function drawScaleBar(gy, half, s){
+  stroke(160,175,195,180); strokeWeight(2);
+  const y=gy+40;
+  line(-half,y,0, half,y,0);
+  line(-half,y-8,0,-half,y+8,0); line(half,y-8,0,half,y+8,0);
+}
+
+// ================= interaction =================
+function projectHandle(wx,wy){
+  // rough screen check: use model-view via p5's screenPosition workaround
+  return null;
+}
+function mousePressed(){
+  if (mouseX>width-300) return;
+  // hit-test the four handles in screen space by re-projecting manually:
+  const s=pxPerM(), half=S.dist*s/2, gy=140;
+  const handles=[
+    {id:'topA', x:-half, y:gy-S.hA*s*VEX}, {id:'topB', x:half, y:gy-S.hB*s*VEX},
+    {id:'baseA',x:-half, y:gy},        {id:'baseB',x:half, y:gy},
+  ];
+  const sp=h=>worldToScreen(h.x,h.y,0);
+  let best=null,bd=28;
+  for(const h of handles){
+    const p=sp(h); if(!p) continue;
+    const d=dist(mouseX,mouseY,p.x,p.y);
+    if(d<bd){bd=d;best=h.id;}
+  }
+  dragTarget=best;
+}
+function worldToScreen(wx,wy,wz){
+  // reconstruct the same camera used in draw()
+  const cxp=camDist*Math.cos(camPitch)*Math.cos(camAngle);
+  const czp=camDist*Math.cos(camPitch)*Math.sin(camAngle);
+  const cyp=camDist*Math.sin(camPitch)-80;
+  const eye=[cxp,cyp,czp], ctr=[0,-110,0], up=[0,1,0];
+  // lookAt basis
+  let f=norm3(sub3(ctr,eye)), s=norm3(cross3(f,up)), u=cross3(s,f);
+  const p=sub3([wx,wy,wz],eye);
+  const xc=dot3(p,s), yc=dot3(p,u), zc=-dot3(p,f);
+  if (zc>=-1) return null;
+  const fov=Math.PI/3, asp=width/height;
+  const sx=(xc/(-zc*Math.tan(fov/2)*asp))*width/2 + width/2;
+  const sy=(-yc/(-zc*Math.tan(fov/2)))*height/2 + height/2;
+  return {x:sx,y:sy};
+}
+function sub3(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function dot3(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function cross3(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function norm3(a){const l=Math.hypot(a[0],a[1],a[2]);return[a[0]/l,a[1]/l,a[2]/l];}
+
+function mouseDragged(){
+  if (mouseX>width-300 && !dragTarget) return;
+  if (!dragTarget){
+    camAngle+=(movedX||0)*0.008;
+    camPitch=constrain(camPitch-(movedY||0)*0.006,-1.15,0.12);
+    return;
+  }
+  const s=pxPerM();
+  if (dragTarget==='topA'){ S.hA=constrain(S.hA-(movedY||0)/(s*VEX),2,40); ui.hA.value=S.hA; }
+  if (dragTarget==='topB'){ S.hB=constrain(S.hB-(movedY||0)/(s*VEX),2,40); ui.hB.value=S.hB; }
+  if (dragTarget==='baseA'||dragTarget==='baseB'){
+    const sign = dragTarget==='baseA' ? -1 : 1;
+    // moving a base outward increases distance
+    const camDir = Math.cos(camAngle)>=0?1:1;
+    S.dist=constrain(S.dist + sign*(movedX||0)/s*2 * (Math.sin(camAngle)>=0?-1:1), 50, 3000);
+    ui.dist.value=S.dist;
+  }
+  syncLabels();
+}
+function mouseReleased(){ dragTarget=null; }
+function mouseWheel(e){ if(mouseX>width-300) return; camDist=constrain(camDist+e.delta*0.9,420,2600); return false; }
+function keyPressed(){ if(key==='s'||key==='S') saveCanvas('urwb_link_plan','png'); }
+function windowResized(){ resizeCanvas(windowWidth,windowHeight); }
+
+// ================= UI =================
+const ui={};
+function buildUI(){
+  const $=id=>document.getElementById(id);
+  ui.apSel=$('apSel'); ui.antSel=$('antSel'); ui.antRow=$('antRow');
+  ui.bandSel=$('bandSel'); ui.tx=$('tx'); ui.dist=$('dist');
+  ui.hA=$('hA'); ui.hB=$('hB');
+  ui.obsOn=$('obsOn'); ui.obsP=$('obsP'); ui.obsH=$('obsH');
+  APS.forEach((a,i)=>ui.apSel.add(new Option(a.name,i)));
+  ANTS.forEach((a,i)=>ui.antSel.add(new Option(a.name,i)));
+  ui.antSel.value=S.ant;
+  ui.apSel.onchange=()=>{ S.ap=+ui.apSel.value;
+    ui.antRow.style.display=APS[S.ap].internal?'none':'block';
+    S.tx=Math.min(S.tx,APS[S.ap].maxTx); ui.tx.max=APS[S.ap].maxTx; ui.tx.value=S.tx; syncLabels(); };
+  ui.antSel.onchange=()=>{ S.ant=+ui.antSel.value; syncLabels(); };
+  ui.bandSel.onchange=()=>{ S.fGHz=+ui.bandSel.value; syncLabels(); };
+  ui.tx.oninput=()=>{ S.tx=+ui.tx.value; syncLabels(); };
+  ui.dist.oninput=()=>{ S.dist=+ui.dist.value; syncLabels(); };
+  ui.hA.oninput=()=>{ S.hA=+ui.hA.value; syncLabels(); };
+  ui.hB.oninput=()=>{ S.hB=+ui.hB.value; syncLabels(); };
+  ui.obsOn.onchange=()=>{ S.obsOn=ui.obsOn.checked; };
+  ui.obsP.oninput=()=>{ S.obsP=+ui.obsP.value; syncLabels(); };
+  ui.obsH.oninput=()=>{ S.obsH=+ui.obsH.value; syncLabels(); };
+  ['showLobes','showFres','show60','showPulse'].forEach(k=>{
+    $(k).onchange=()=>{ S[k]=$(k).checked; };
+  });
+  ui.apSel.onchange();
+}
+function syncLabels(){
+  const $=id=>document.getElementById(id);
+  $('txV').textContent=S.tx+' dBm';
+  $('distV').textContent=S.dist+' m';
+  $('hAV').textContent=S.hA.toFixed(1)+' m';
+  $('hBV').textContent=S.hB.toFixed(1)+' m';
+  $('obsPV').textContent=S.obsP+' %';
+  $('obsHV').textContent=S.obsH.toFixed(1)+' m';
+  const ant=activeAnt();
+  $('eirpNote').textContent=`Antenna ${ant.gain} dBi, ${ant.bwAz}\u00B0 az x ${ant.bwEl}\u00B0 el. EIRP = Tx + gain = ${(S.tx+ant.gain)} dBm. Regulatory ceilings (SP/AFC etc.) are the deployer's responsibility.`;
+}
+function updateReadout(){
+  const $=id=>document.getElementById(id);
+  $('bEirp').textContent=result.eirp.toFixed(0)+' dBm';
+  $('bFspl').textContent=result.fspl.toFixed(1)+' dB';
+  $('bRssi').textContent=result.rssi.toFixed(1)+' dBm';
+  $('bSens').textContent=result.sens+' dBm';
+  $('bMargin').textContent=result.margin.toFixed(1)+' dB';
+  $('bF1').textContent=result.f1mid.toFixed(1)+' m';
+  $('bClear').textContent=(result.worst*100).toFixed(0)+' % of F1';
+  const st=$('status'); st.textContent=result.stat; st.className=result.cls;
+}
+syncLabels && null;
+</script>
+</body>
+</html>
