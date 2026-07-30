@@ -31,6 +31,11 @@ access points (IW9165D / IW9165E / IW9167E, URWB-style deployments).
   highlights red where it is being violated
 - Auto-scaled distance markers and labeled meter ticks along the ground so
   dragging the sites apart reads as real distance
+- Metropolitan setting: procedural city skyline with lit windows, asphalt
+  corridor with lane markings and street lights under the link
+- Live 2D side-view link profile chart in the panel (poles, LOS, Fresnel
+  ellipse, obstacle) plus color-graded meter bars for fade margin and
+  Fresnel clearance
 - Live link budget: EIRP, free-space path loss, RSSI, fade margin, F1 radius,
   and worst-case Fresnel clearance, with an OK / DEGRADED / BLOCKED verdict
 - AP picker: IW9165D internal 15 dBi directional, or IW9165E / IW9167E with
@@ -64,6 +69,11 @@ access points (IW9165D / IW9165E / IW9167E, URWB-style deployments).
 
 - Keep 100% of F1 clear; 60% is the minimum before diffraction loss begins
 - Fade margin: 10+ dB for reliable backhaul, 20 dB for critical links
+
+## Further reading
+
+- Cisco Ultra-Reliable Wireless Backhaul design and deployment guides:
+  https://www.cisco.com/c/en/us/support/wireless/ultra-reliable-wireless-backhaul/series.html
 
 ## License
 

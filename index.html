@@ -36,6 +36,14 @@
     font-variant-numeric:tabular-nums; }
   #status { border-radius:6px; padding:8px 10px; font-size:12.5px; font-weight:700;
     text-align:center; margin-top:8px; letter-spacing:.4px; }
+  #profile { display:block; width:100%; border-radius:6px; border:1px solid var(--line);
+    margin:4px 0 8px 0; background:#0d1320; }
+  .meter { margin:6px 0 2px 0; }
+  .meter span { font-size:10.5px; color:var(--dim); display:flex; justify-content:space-between; }
+  .meter .bar { height:7px; border-radius:4px; background:#0d1320; border:1px solid var(--line);
+    overflow:hidden; margin-top:2px; }
+  .meter .bar>div { height:100%; border-radius:4px; transition:width .15s;
+    background:linear-gradient(90deg,#f87171 0%,#fbbf24 35%,#4ade80 70%); }
   .s-ok   { background:rgba(74,222,128,.12); color:var(--ok);   border:1px solid rgba(74,222,128,.4); }
   .s-warn { background:rgba(251,191,36,.12); color:var(--warn); border:1px solid rgba(251,191,36,.4); }
   .s-bad  { background:rgba(248,113,113,.12); color:var(--bad); border:1px solid rgba(248,113,113,.4); }
@@ -103,6 +111,9 @@
 
   <div class="grp" id="budget">
     <h2>Link Budget</h2>
+    <canvas id="profile" width="268" height="128"></canvas>
+    <div class="meter"><span>Fade margin <b id="mMv"></b></span><div class="bar"><div id="mMargin"></div></div></div>
+    <div class="meter"><span>Fresnel clearance <b id="mCv"></b></span><div class="bar"><div id="mClear"></div></div></div>
     <table>
       <tr><td>EIRP per end</td><td id="bEirp"></td></tr>
       <tr><td>Free-space path loss</td><td id="bFspl"></td></tr>
@@ -145,7 +156,7 @@ const S = {
   obsOn:true, obsT:'tree', obsP:50, obsH:6,
   showLobes:true, showFres:true, show60:true, showPulse:true,
 };
-let camAngle=1.25, camPitch=-0.14, camDist=1250, t=0;
+let camAngle=1.25, camPitch=-0.30, camDist=1350, t=0;
 const VEX=4;   // vertical display exaggeration (math uses true values)
 let dragTarget=null; // 'topA','topB','baseA','baseB', or null->orbit
 let result={};       // computed link results each frame
@@ -257,6 +268,7 @@ function draw(){
   const yA=groundY - S.hA*s*VEX, yB=groundY - S.hB*s*VEX;
 
   drawGround(groundY, half);
+  drawCity(groundY, half);
   drawPole(-half, groundY, S.hA*s*VEX, 'A');
   drawPole( half, groundY, S.hB*s*VEX, 'B');
   if (S.obsOn) drawObstacle(groundY, half, s);
@@ -270,9 +282,60 @@ function draw(){
   drawScaleBar(groundY, half, s);
 }
 
+// deterministic pseudo-random for stable skyline
+function prand(i){ const x=Math.sin(i*127.1+311.7)*43758.5453; return x-Math.floor(x); }
+
+function drawCity(gy, half){
+  // two rows of background buildings flanking the link corridor
+  noStroke();
+  const ext=Math.max(half*1.35, 950);
+  for(const zSide of [-1,1]){
+    for(let i=0;i<26;i++){
+      const r1=prand(i+zSide*100), r2=prand(i*3+zSide*57), r3=prand(i*7+zSide*13);
+      const bx=-ext+ (i/25)*ext*2 + (r1-0.5)*60;
+      const bz=zSide*(430+r2*320);
+      const bw=38+r1*58, bh=40+r3*120, bd=38+r2*52;
+      // skip if too close to the link corridor
+      if (Math.abs(bz)<400) continue;
+      push(); translate(bx, gy-bh/2, bz);
+      const warm=r2>0.5;
+      fill(warm?74:60, warm?70:66, warm?80:84);
+      box(bw, bh, bd);
+      pop();
+      // lit windows (sparse, emissive)
+      const rows=Math.floor(bh/26), cols=Math.max(2,Math.floor(bw/16));
+      for(let wR=0;wR<rows;wR++) for(let wC=0;wC<cols;wC++){
+        if (prand(i*97+wR*13+wC*7+zSide)>0.72){
+          push();
+          translate(bx-bw/2+8+wC*(bw-16)/Math.max(cols-1,1),
+                    gy-16-wR*26,
+                    bz-zSide*(bd/2+1));
+          emissiveMaterial(255, 205+prand(wR+wC)*40, 120);
+          box(6,9,1.5);
+          pop();
+        }
+      }
+    }
+  }
+  // asphalt corridor under the link
+  push(); translate(0, gy-0.5, 120); rotateX(HALF_PI); noStroke();
+  fill(52,54,60); plane(ext*2, 150); pop();
+  // lane dashes
+  stroke(215,190,120,150); strokeWeight(2);
+  for(let x=-ext;x<ext;x+=90){ line(x,gy-1,120, x+38,gy-1,120); }
+  // street lights along corridor
+  for(let x=-ext+120;x<ext;x+=340){
+    push(); translate(x, gy-40, 190); noStroke();
+    fill(60,66,74); cylinder(2, 80);
+    translate(0,-42,-14); fill(60,66,74); box(30,3,3);
+    translate(-14,3,0); emissiveMaterial(255,230,170); sphere(3.5);
+    pop();
+  }
+}
+
 function drawGround(gy, half){
   push(); translate(0,gy+1,0); rotateX(HALF_PI); noStroke();
-  fill(44,52,40); plane(Math.max(half*2.6,1800), 1400); pop();
+  fill(47,50,46); plane(Math.max(half*2.6,1800), 1400); pop();
   stroke(70,80,62,70); strokeWeight(1);
   const ext=Math.max(half*1.3,900);
   for(let g=-ext; g<=ext; g+=200){ line(g,gy,-700,g,gy,700); }
@@ -576,6 +639,56 @@ function syncLabels(){
   const ant=activeAnt();
   $('eirpNote').textContent=`Antenna ${ant.gain} dBi, ${ant.bwAz}\u00B0 az x ${ant.bwEl}\u00B0 el. EIRP = Tx + gain = ${(S.tx+ant.gain)} dBm. Regulatory ceilings (SP/AFC etc.) are the deployer's responsibility.`;
 }
+function drawProfile(){
+  const cv=document.getElementById('profile'); if(!cv) return;
+  const c=cv.getContext('2d'), W=cv.width, H=cv.height;
+  const padL=8,padR=8,padT=10,padB=14, iw=W-padL-padR, ih=H-padT-padB;
+  const maxH=Math.max(S.hA,S.hB,S.obsOn?S.obsH:0)*1.35+2;
+  const X=f=>padL+f*iw, Y=h=>padT+ih-(h/maxH)*ih;
+  c.clearRect(0,0,W,H);
+  // sky + ground
+  const sky=c.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,'#1c2740'); sky.addColorStop(1,'#232c3e');
+  c.fillStyle=sky; c.fillRect(0,0,W,H);
+  c.fillStyle='#2e3a2c'; c.fillRect(0,Y(0),W,H-Y(0));
+  const dKm=S.dist/1000;
+  // Fresnel ellipse (F1) filled
+  c.beginPath();
+  for(let i=0;i<=60;i++){ const f=i/60, los=S.hA+(S.hB-S.hA)*f;
+    const r=fresR(f,dKm); i?c.lineTo(X(f),Y(los+r)):c.moveTo(X(f),Y(los+r)); }
+  for(let i=60;i>=0;i--){ const f=i/60, los=S.hA+(S.hB-S.hA)*f;
+    c.lineTo(X(f),Y(los-fresR(f,dKm))); }
+  c.closePath();
+  const bad=result.worst<0.6;
+  c.fillStyle=bad?'rgba(248,113,113,.20)':'rgba(96,190,255,.18)';
+  c.fill(); c.strokeStyle=bad?'rgba(248,113,113,.7)':'rgba(126,203,255,.6)'; c.lineWidth=1; c.stroke();
+  // 60% core
+  c.beginPath();
+  for(let i=0;i<=60;i++){ const f=i/60, los=S.hA+(S.hB-S.hA)*f;
+    const r=fresR(f,dKm)*0.6; i?c.lineTo(X(f),Y(los+r)):c.moveTo(X(f),Y(los+r)); }
+  for(let i=60;i>=0;i--){ const f=i/60, los=S.hA+(S.hB-S.hA)*f;
+    c.lineTo(X(f),Y(los-fresR(f,dKm)*0.6)); }
+  c.closePath(); c.strokeStyle='rgba(140,220,255,.45)'; c.setLineDash([3,3]); c.stroke(); c.setLineDash([]);
+  // obstacle
+  if(S.obsOn){ const f=S.obsP/100;
+    c.fillStyle= S.obsT==='tree' ? '#3f7a46' : S.obsT==='building' ? '#a89680' : '#7a6c5c';
+    c.fillRect(X(f)-5, Y(S.obsH), 10, Y(0)-Y(S.obsH)); }
+  // LOS
+  c.beginPath(); c.moveTo(X(0),Y(S.hA)); c.lineTo(X(1),Y(S.hB));
+  c.strokeStyle='#fff'; c.lineWidth=1.4; c.stroke();
+  // poles + APs
+  for(const [f,h] of [[0,S.hA],[1,S.hB]]){
+    c.strokeStyle='#8b95a3'; c.lineWidth=3;
+    c.beginPath(); c.moveTo(X(f),Y(0)); c.lineTo(X(f),Y(h)); c.stroke();
+    c.fillStyle='#e8ecf2'; c.fillRect(X(f)-4,Y(h)-4,8,8);
+  }
+  // labels
+  c.fillStyle='#93a3b8'; c.font='9px Helvetica'; c.textAlign='left';
+  c.fillText('0 m',padL,H-3); c.textAlign='right'; c.fillText(S.dist+' m',W-padR,H-3);
+  c.textAlign='center'; c.fillStyle='#cfd8e3';
+  c.fillText('link profile (side view)',W/2,padT-2);
+}
+
 function updateReadout(){
   const $=id=>document.getElementById(id);
   $('bEirp').textContent=result.eirp.toFixed(0)+' dBm';
@@ -586,6 +699,11 @@ function updateReadout(){
   $('bF1').textContent=result.f1mid.toFixed(1)+' m';
   $('bClear').textContent=(result.worst*100).toFixed(0)+' % of F1';
   const st=$('status'); st.textContent=result.stat; st.className=result.cls;
+  $('mMv').textContent=result.margin.toFixed(1)+' dB';
+  $('mCv').textContent=(result.worst*100).toFixed(0)+' %';
+  $('mMargin').style.width=constrain(result.margin/40*100,0,100)+'%';
+  $('mClear').style.width=constrain(result.worst/1.5*100,0,100)+'%';
+  drawProfile();
 }
 syncLabels && null;
 </script>
