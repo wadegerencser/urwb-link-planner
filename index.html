@@ -10,7 +10,8 @@
     --bg:#0b0e14; --panel:#11161f; --panel2:#161d29; --line:#26303f;
     --txt:#cfd8e3; --dim:#7d8ca0; --acc:#7ecbff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
   }
-  html,body { margin:0; padding:0; overflow:hidden; background:var(--bg);
+  html,body { margin:0; padding:0; overflow:hidden;
+    background:linear-gradient(180deg,#1b2438 0%,#2a3550 45%,#3d4257 68%,#2e3040 100%);
     font-family:'Helvetica Neue',Arial,sans-serif; color:var(--txt); }
   canvas.p5Canvas { display:block; }
   #panel {
@@ -80,6 +81,12 @@
   <div class="grp">
     <h2>Obstacle</h2>
     <label class="chk"><input type="checkbox" id="obsOn" checked> Enable obstacle</label>
+    <label>Obstacle type</label>
+    <select id="obsT">
+      <option value="tree">Tree</option>
+      <option value="building">Small building</option>
+      <option value="block">Generic block</option>
+    </select>
     <label>Position along path <b id="obsPV"></b></label>
     <input type="range" id="obsP" min="5" max="95" step="1" value="50">
     <label>Obstacle height <b id="obsHV"></b></label>
@@ -109,7 +116,7 @@
     <div class="note">Vertical scale exaggerated 4x for visibility; all computed values are true. FSPL model only (no rain/multipath). URWB best practice: keep 100% of F1 clear; 60% minimum. Fade margin target 10+ dB for reliable backhaul, 20 dB for critical.</div>
   </div>
 </div>
-<div id="keys"><b>drag scene</b> orbit &nbsp; <b>scroll</b> zoom &nbsp; <b>drag pole tops</b> raise/lower &nbsp; <b>drag pole bases</b> move apart &nbsp; <b>S</b> save PNG</div>
+<div id="keys"><b>drag scene</b> orbit &nbsp; <b>scroll</b> zoom &nbsp; <b>drag pole tops</b> raise/lower &nbsp; <b>drag pole bases</b> move apart &nbsp; <b>drag green obstacle handle</b> move/resize &nbsp; <b>S</b> save PNG</div>
 
 <script>
 p5.disableFriendlyErrors = true;
@@ -135,7 +142,7 @@ const ANTS = [
 const S = {
   ap:0, ant:3, fGHz:5.5, tx:20,
   dist:600, hA:10, hB:10,
-  obsOn:true, obsP:50, obsH:6,
+  obsOn:true, obsT:'tree', obsP:50, obsH:6,
   showLobes:true, showFres:true, show60:true, showPulse:true,
 };
 let camAngle=1.25, camPitch=-0.14, camDist=1250, t=0;
@@ -229,15 +236,16 @@ function buildLobeCache(){
 
 function draw(){
   t+=deltaTime/1000;
-  background(11,14,20);
+  clear();
   const view=(width-300);
   // camera orbit around scene center
   const cx=camDist*Math.cos(camPitch)*Math.cos(camAngle);
   const cz=camDist*Math.cos(camPitch)*Math.sin(camAngle);
   const cy=camDist*Math.sin(camPitch)-80;
   camera(cx,cy,cz, 0,-110,0, 0,1,0);
-  ambientLight(75,80,90);
-  directionalLight(190,195,205,-0.4,0.8,-0.3);
+  ambientLight(88,84,80);
+  directionalLight(255,225,185,-0.45,0.75,-0.25);   // low warm sun
+  directionalLight(70,90,130,0.4,0.3,0.5);          // cool sky fill
 
   result=computeLink();
   buildLobeCache();
@@ -264,11 +272,11 @@ function draw(){
 
 function drawGround(gy, half){
   push(); translate(0,gy+1,0); rotateX(HALF_PI); noStroke();
-  fill(20,27,38); plane(Math.max(half*2.6,1800), 1400); pop();
-  stroke(38,52,70,120); strokeWeight(1);
+  fill(44,52,40); plane(Math.max(half*2.6,1800), 1400); pop();
+  stroke(70,80,62,70); strokeWeight(1);
   const ext=Math.max(half*1.3,900);
-  for(let g=-ext; g<=ext; g+=100){ line(g,gy,-700,g,gy,700); }
-  for(let g=-700; g<=700; g+=100){ line(-ext,gy,g,ext,gy,g); }
+  for(let g=-ext; g<=ext; g+=200){ line(g,gy,-700,g,gy,700); }
+  for(let g=-700; g<=700; g+=200){ line(-ext,gy,g,ext,gy,g); }
 }
 
 function drawPole(x, gy, hpx, tag){
@@ -288,12 +296,45 @@ function drawPole(x, gy, hpx, tag){
   fill(255,190,80, 190); sphere(6); pop();       // base handle
 }
 
+function obstacleX(half){ return -half + (S.obsP/100)*half*2; }
+
 function drawObstacle(gy, half, s){
-  const x=-half + (S.obsP/100)*half*2;
-  const hpx=S.obsH*s*VEX, wpx=S.dist*0.04*s;
-  push(); translate(x, gy-hpx/2, 0); noStroke();
-  fill(90,80,70,230); box(Math.max(wpx,14), hpx, 90); 
-  pop();
+  const x=obstacleX(half);
+  const hpx=S.obsH*s*VEX;
+  noStroke();
+  if (S.obsT==='tree'){
+    // trunk (lower ~35%) + layered conifer canopy
+    const trunk=hpx*0.3, canopy=hpx*0.78, cw=Math.max(hpx*0.42,20);
+    push(); translate(x, gy-trunk/2, 0); fill(96,68,44); cylinder(Math.max(hpx*0.035,3), trunk); pop();
+    for(let i=0;i<3;i++){
+      const cy=gy-trunk-canopy*(0.18+0.30*i), cr=cw*(1-0.26*i);
+      push(); translate(x, cy, 0); fill(52,96+i*14,54); rotateX(PI); cone(cr, canopy*0.46); pop();
+    }
+  } else if (S.obsT==='building'){
+    const w=Math.max(hpx*0.9,30), dep=90;
+    push(); translate(x, gy-hpx*0.44, 0); fill(168,150,128); box(w, hpx*0.88, dep); pop();
+    // roof
+    push(); translate(x, gy-hpx*0.94, 0); fill(120,72,58);
+    beginShape(TRIANGLES);
+    const rh=hpx*0.12;
+    vertex(-w/2,rh,-dep/2); vertex(w/2,rh,-dep/2); vertex(0,-rh,-dep/2);
+    vertex(-w/2,rh, dep/2); vertex(w/2,rh, dep/2); vertex(0,-rh, dep/2);
+    endShape();
+    fill(126,78,62); beginShape(TRIANGLE_STRIP);
+    vertex(-w/2,rh,-dep/2); vertex(-w/2,rh,dep/2); vertex(0,-rh,-dep/2); vertex(0,-rh,dep/2);
+    vertex(w/2,rh,-dep/2); vertex(w/2,rh,dep/2);
+    endShape(); pop();
+    // windows
+    fill(255,215,140,210);
+    const rows=Math.max(1,Math.floor(hpx*0.88/34));
+    for(let r=0;r<rows;r++){ for(let c=-1;c<=1;c++){
+      push(); translate(x+c*w*0.28, gy-hpx*0.18-r*34, dep/2+1); box(10,13,2); pop();
+    }}
+  } else {
+    push(); translate(x, gy-hpx/2, 0); fill(122,108,92,235); box(Math.max(S.dist*0.04*s,14), hpx, 90); pop();
+  }
+  // drag handle at obstacle top
+  push(); translate(x, gy-hpx, 0); fill(180,255,140,200); sphere(6); pop();
 }
 
 function drawLOS(x1,y1,x2,y2){
@@ -382,12 +423,44 @@ function drawPulses(x1,y1,x2,y2){
   }
 }
 
+let markerG=null, markerKey='';
 function drawScaleBar(gy, half, s){
-  stroke(160,175,195,180); strokeWeight(2);
-  const y=gy+40;
-  line(-half,y,0, half,y,0);
-  line(-half,y-8,0,-half,y+8,0); line(half,y-8,0,half,y+8,0);
+  // baseline along the link on the floor
+  stroke(230,215,180,150); strokeWeight(2);
+  const y=gy+2;
+  line(-half,y,120, half,y,120);
+  // pick a tick step: ~6-12 ticks
+  const steps=[10,25,50,100,250,500,1000];
+  let step=steps.find(st=>S.dist/st<=12)||1000;
+  // tick marks + labels
+  const key=step+'/'+S.dist;
+  if(key!==markerKey){ markerKey=key; markerG=buildMarkerStrip(step); }
+  for(let m=0;m<=S.dist;m+=step){
+    const x=-half+m*s;
+    stroke(230,215,180,170); strokeWeight(m%(step*2)===0?2.5:1.2);
+    line(x,y,108, x,y,132);
+  }
+  // billboard labels every other tick
+  textureMode(NORMAL);
+  for(let m=0;m<=S.dist;m+=step*2){
+    const x=-half+m*s;
+    const g=labelFor(m+' m');
+    push(); translate(x, gy-14, 150);
+    rotateY(-camAngle+HALF_PI); // face camera
+    texture(g); noStroke(); plane(g.width*0.55, g.height*0.55);
+    pop();
+  }
 }
+const labelCache={};
+function labelFor(txt){
+  if(labelCache[txt]) return labelCache[txt];
+  const g=createGraphics(96,34); g.pixelDensity(1); g.clear();
+  g.noStroke(); g.fill(15,20,30,190); g.rect(0,0,96,34,8);
+  g.fill(235,220,185); g.textAlign(g.CENTER,g.CENTER); g.textSize(17); g.textStyle(g.BOLD);
+  g.text(txt,48,17);
+  labelCache[txt]=g; return g;
+}
+function buildMarkerStrip(){ return null; }
 
 // ================= interaction =================
 function projectHandle(wx,wy){
@@ -402,6 +475,7 @@ function mousePressed(){
     {id:'topA', x:-half, y:gy-S.hA*s*VEX}, {id:'topB', x:half, y:gy-S.hB*s*VEX},
     {id:'baseA',x:-half, y:gy},        {id:'baseB',x:half, y:gy},
   ];
+  if (S.obsOn) handles.push({id:'obs', x:obstacleX(half), y:gy-S.obsH*s*VEX});
   const sp=h=>worldToScreen(h.x,h.y,0);
   let best=null,bd=28;
   for(const h of handles){
@@ -442,6 +516,12 @@ function mouseDragged(){
   const s=pxPerM();
   if (dragTarget==='topA'){ S.hA=constrain(S.hA-(movedY||0)/(s*VEX),2,40); ui.hA.value=S.hA; }
   if (dragTarget==='topB'){ S.hB=constrain(S.hB-(movedY||0)/(s*VEX),2,40); ui.hB.value=S.hB; }
+  if (dragTarget==='obs'){
+    S.obsH=constrain(S.obsH-(movedY||0)/(s*VEX),0,35); ui.obsH.value=S.obsH;
+    const dir=Math.sin(camAngle)>=0?-1:1;
+    S.obsP=constrain(S.obsP+dir*(movedX||0)/(s*2)/S.dist*100*2,5,95); ui.obsP.value=S.obsP;
+    syncLabels(); return;
+  }
   if (dragTarget==='baseA'||dragTarget==='baseB'){
     const sign = dragTarget==='baseA' ? -1 : 1;
     // moving a base outward increases distance
@@ -463,7 +543,7 @@ function buildUI(){
   ui.apSel=$('apSel'); ui.antSel=$('antSel'); ui.antRow=$('antRow');
   ui.bandSel=$('bandSel'); ui.tx=$('tx'); ui.dist=$('dist');
   ui.hA=$('hA'); ui.hB=$('hB');
-  ui.obsOn=$('obsOn'); ui.obsP=$('obsP'); ui.obsH=$('obsH');
+  ui.obsOn=$('obsOn'); ui.obsT=$('obsT'); ui.obsP=$('obsP'); ui.obsH=$('obsH');
   APS.forEach((a,i)=>ui.apSel.add(new Option(a.name,i)));
   ANTS.forEach((a,i)=>ui.antSel.add(new Option(a.name,i)));
   ui.antSel.value=S.ant;
@@ -477,6 +557,7 @@ function buildUI(){
   ui.hA.oninput=()=>{ S.hA=+ui.hA.value; syncLabels(); };
   ui.hB.oninput=()=>{ S.hB=+ui.hB.value; syncLabels(); };
   ui.obsOn.onchange=()=>{ S.obsOn=ui.obsOn.checked; };
+  ui.obsT.onchange=()=>{ S.obsT=ui.obsT.value; };
   ui.obsP.oninput=()=>{ S.obsP=+ui.obsP.value; syncLabels(); };
   ui.obsH.oninput=()=>{ S.obsH=+ui.obsH.value; syncLabels(); };
   ['showLobes','showFres','show60','showPulse'].forEach(k=>{
